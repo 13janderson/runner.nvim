@@ -49,12 +49,16 @@ function State:show_out(tbl)
     vim.api.nvim_buf_set_name(bufnr, self.output_buffer)
 
     -- Set buffer options
-    ---@diagnostic disable-next-line
-    vim.api.nvim_buf_set_option(bufnr, 'modifiable', false)
+    vim.api.nvim_set_option_value('modifiable', false, {
+      buf = bufnr,
+    })
+    vim.api.nvim_set_option_value('buftype', 'nofile', {
+      buf = bufnr,
+    })
   end
 
   self.src_winnr = vim.api.nvim_get_current_win()
-  self.out_winnr = vim.api.nvim_open_win(bufnr, false, {
+  self.out_winnr = vim.api.nvim_open_win(bufnr, true, {
     split = 'right',
     width = 60,
     win = 0
@@ -64,28 +68,28 @@ function State:show_out(tbl)
 
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, tbl)
 
-  self:focus_output_win()
-
   vim.api.nvim_create_autocmd('BufWinEnter', {
     desc = 'Re-direct new buffers to another win.',
     group = vim.api.nvim_create_augroup('Buffer-Win-Redirect', { clear = true }),
     callback = function(_)
-      -- Check that the windows current buffer is the self.out_bufnr
-      if vim.api.nvim_win_is_valid(self.out_winnr) then
-        local openbufnr = vim.api.nvim_win_get_buf(self.out_winnr)
-        if openbufnr ~= self.out_bufnr then
-          -- print("New bufnr opened", openbufnr)
+      vim.schedule(function()
+        -- Check that the windows current buffer is the self.out_bufnr
+        if vim.api.nvim_win_is_valid(self.out_winnr) then
+          local openbufnr = vim.api.nvim_win_get_buf(self.out_winnr)
+          if openbufnr ~= self.out_bufnr then
+            -- print("New bufnr opened", openbufnr)
 
-          -- print("Opening",  self.out_bufnr, "in", self.out_winnr)
-          vim.api.nvim_win_set_buf(self.out_winnr, self.out_bufnr)
+            -- print("Opening",  self.out_bufnr, "in", self.out_winnr)
+            vim.api.nvim_win_set_buf(self.out_winnr, self.out_bufnr)
 
-          -- print("Opening", openbufnr, "in", self.src_winnr)
-          vim.api.nvim_win_set_buf(self.src_winnr, openbufnr)
-          -- Additionally focus window with this in.
+            -- print("Opening", openbufnr, "in", self.src_winnr)
+            vim.api.nvim_win_set_buf(self.src_winnr, openbufnr)
+            -- Additionally focus window with this in.
 
-          self:focus_source_win()
+            self:focus_source_win()
+          end
         end
-      end
+      end)
     end,
   })
 end
