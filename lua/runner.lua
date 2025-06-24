@@ -64,24 +64,12 @@ function State:show_out(tbl)
 
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, tbl)
 
-  vim.api.nvim_create_autocmd('WinClosed', {
-    desc = 'Close output window when src window is closed',
-    group = vim.api.nvim_create_augroup('Output-Win-Close', { clear = true }),
-    callback = function(e)
-      if e.match == self.src_winnr then
-        print("Closing src window")
-        -- vim.api.nvim_win_close(self.out_winnr, true)
-      end
-    end,
-  })
-
   self:focus_output_win()
 
   vim.api.nvim_create_autocmd('BufWinEnter', {
     desc = 'Re-direct new buffers to another win.',
     group = vim.api.nvim_create_augroup('Buffer-Win-Redirect', { clear = true }),
     callback = function(_)
-
       -- Check that the windows current buffer is the self.out_bufnr
       if vim.api.nvim_win_is_valid(self.out_winnr) then
         local openbufnr = vim.api.nvim_win_get_buf(self.out_winnr)
@@ -100,7 +88,6 @@ function State:show_out(tbl)
       end
     end,
   })
-
 end
 
 ---@return string filepath
