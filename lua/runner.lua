@@ -10,40 +10,97 @@ local Runner = {
 ---@class State
 local State = {
   file = nil,
-  cmd = nil,
+  cmd = nil
 }
 
 -- Constructs a State object and sets its meta table to be the State table
 -- so that all State objects can use these shared methods.
 ---@param state State
 function State:new(state)
-  ---@type State
-  ---@diagnostic disable-next-line
   self.__index = self
   setmetatable(state, self)
   return state
 end
 
+-- Changes the focus to the provided window by winnr, if that window is valid.
+---@param winnr integer the window number to change focus to.
+function State:change_window_focus(winnr)
+  if vim.api.nvim_win_is_valid(winnr) then
+    vim.api.nvim_set_current_win(winnr)
+  end
+end
+
+function State:focus_output_win()
+  self:change_window_focus(self.out_winnr)
+end
+
+function State:focus_source_win()
+  self:change_window_focus(self.src_winnr)
+end
+
 ---@param tbl table
 function State:show_out(tbl)
-  local output_buffer = string.format("%s.out", self.file)
-  vim.cmd('silent only') -- Close all windows apart from current
-  vim.cmd('55vsplit')    -- Create new vertical split with 75 columns for new window
+  self.output_buffer = string.format("%s.out", self.file)
 
   -- Re-use old buffer with same name
-  local bufnr = vim.fn.bufnr(output_buffer, false)
+  local bufnr = vim.fn.bufnr(self.output_buffer, false)
   if bufnr == -1 then
     bufnr = vim.api.nvim_create_buf(true, false)
-    vim.api.nvim_buf_set_name(bufnr, output_buffer)
+    vim.api.nvim_buf_set_name(bufnr, self.output_buffer)
 
     -- Set buffer options
+    ---@diagnostic disable-next-line
     vim.api.nvim_buf_set_option(bufnr, 'modifiable', false)
-    vim.api.nvim_buf_set_option(bufnr, 'readonly', true)
   end
-  vim.api.nvim_win_set_buf(0, bufnr)
 
-  -- Coalesce stderr and stdout
+  self.src_winnr = vim.api.nvim_get_current_win()
+  self.out_winnr = vim.api.nvim_open_win(bufnr, false, {
+    split = 'right',
+    width = 60,
+    win = 0
+  })
+
+  self.out_bufnr = bufnr
+
   vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, tbl)
+
+  vim.api.nvim_create_autocmd('WinClosed', {
+    desc = 'Close output window when src window is closed',
+    group = vim.api.nvim_create_augroup('Output-Win-Close', { clear = true }),
+    callback = function(e)
+      if e.match == self.src_winnr then
+        print("Closing src window")
+        -- vim.api.nvim_win_close(self.out_winnr, true)
+      end
+    end,
+  })
+
+  self:focus_output_win()
+
+  vim.api.nvim_create_autocmd('BufWinEnter', {
+    desc = 'Re-direct new buffers to another win.',
+    group = vim.api.nvim_create_augroup('Buffer-Win-Redirect', { clear = true }),
+    callback = function(_)
+
+      -- Check that the windows current buffer is the self.out_bufnr
+      if vim.api.nvim_win_is_valid(self.out_winnr) then
+        local openbufnr = vim.api.nvim_win_get_buf(self.out_winnr)
+        if openbufnr ~= self.out_bufnr then
+          -- print("New bufnr opened", openbufnr)
+
+          -- print("Opening",  self.out_bufnr, "in", self.out_winnr)
+          vim.api.nvim_win_set_buf(self.out_winnr, self.out_bufnr)
+
+          -- print("Opening", openbufnr, "in", self.src_winnr)
+          vim.api.nvim_win_set_buf(self.src_winnr, openbufnr)
+          -- Additionally focus window with this in.
+
+          self:focus_source_win()
+        end
+      end
+    end,
+  })
+
 end
 
 ---@return string filepath
