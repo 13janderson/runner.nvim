@@ -1,5 +1,8 @@
-local state_path = vim.fn.stdpath("data") .. "/" .. "runner"
+local M = {
+  opts = {},
+}
 
+local state_path = vim.fn.stdpath("data") .. "/" .. "runner"
 local options = {
   "makeprg",
   "errorformat",
@@ -14,24 +17,14 @@ local function check_opt(opt)
   return false
 end
 
----@class State
-local M = {
-  -- file = nil,
-  -- makeprg = nil,
-  -- compiler = nil,
-  opts = {},
-}
 
----@return string filepath
-function M:current_file()
-  return vim.uv.cwd() .. "/" .. vim.fn.expand("%")
-end
-
+local git = require "git"
 -- Returns the path to the state file for the current open file.
 --- @return string
 function M:state_file()
-  local current_file = self:current_file()
-  local current_file_state = state_path .. "/" .. vim.fn.sha256(current_file) .. ".json"
+  local git_file_hash = git:git_file_hash()
+  -- TODO use fully qualified path in combination with git branch if available
+  local current_file_state = state_path .. "/" .. git_file_hash .. ".json"
   return current_file_state
 end
 
@@ -77,14 +70,6 @@ function M:setup_autocommands()
   })
 end
 
-local foo = "foo %"
-local bar = foo[string.len(foo)]
-
-print("bar", bar)
-if foo[string.len(foo)] == "%" then
-  print("perc", foo)
-end
-
 -- returns the uppercased version of a keymap by changing
 -- the last key of the keymap to upper case
 ---@param keymap string
@@ -93,15 +78,23 @@ local function uppercase_lastkey(keymap)
   return keymap:sub(0, len - 1) .. keymap:sub(len, len):upper()
 end
 
----@param opts table
-function M:setup_keymaps(opts)
+---@param background boolean | nil
+function M:read_and_make(background)
+  self:try_read_opts()
+  local make_cmd = 'Make'
+  if background then
+    make_cmd = make_cmd .. '!'
+  end
+  vim.cmd(make_cmd)
+end
+
+function M:setup_keymaps()
+  local opts = self.opts
   vim.keymap.set("n", opts.make, function()
-    self:try_read_opts()
-    vim.cmd('Make')
+    self:read_and_make()
   end)
   vim.keymap.set("n", uppercase_lastkey(opts.make), function()
-    self:try_read_opts()
-    vim.cmd('Make!')
+    self:read_and_make(true)
   end)
 end
 
@@ -115,6 +108,7 @@ local SetupOpts = {}
 
 ---@param opts SetupOpts | nil
 function M:setup(opts)
+  print 'setup called'
   opts = opts or {
     keymaps = {
       make = "<leader>mk",
@@ -123,9 +117,9 @@ function M:setup(opts)
 
   vim.fn.mkdir(state_path, "p")
   self:setup_autocommands()
-  self:setup_keymaps(opts.keymaps)
+  self:setup_keymaps()
 end
 
-M:setup()
+print 'returning M'
 
 return M
