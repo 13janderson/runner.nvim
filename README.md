@@ -4,7 +4,6 @@ This plugin builds on top of the compiler workflow and vim-dispatch to add a lay
 The result of this is not having to constantly remember a particular command to run for a particular file, maybe its a unit test, maybe it's compilation step, etc. This should enable lower friction feedback loops within (Neo)vim.
 
 # Install
-
 Lazy:
 ```lua
 return {

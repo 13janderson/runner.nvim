@@ -1,6 +1,6 @@
 local M = {
   maps = {},
-  opts = {}
+  opts = {},
 }
 
 local state_path = vim.fn.stdpath("data") .. "/" .. "runner"
@@ -33,7 +33,7 @@ function M:write_state_file()
     state_file:write(vim.json.encode(self.opts))
     state_file:close()
   else
-    -- TODO
+    error("failed to write to runner state file.")
   end
 end
 
@@ -50,7 +50,7 @@ function M:try_read_opts()
         vim.api.nvim_set_option_value(key, value, { scope = "local", buf = 0 })
       end
     else
-      -- TO DO
+      error("failed to read runner state file.")
     end
   end
 end
@@ -77,23 +77,50 @@ local function uppercase_lastkey(keymap)
   return keymap:sub(0, len - 1) .. keymap:sub(len, len):upper()
 end
 
----@param background boolean | nil
-function M:read_and_make(background)
+---@class MakeOpts
+---@field background boolean
+---@field current boolean
+---@param opts MakeOpts
+function M:read_and_make(opts)
   self:try_read_opts()
+  opts = vim.tbl_deep_extend("force", { background = false, current = false }, opts)
   local make_cmd = "Make"
-  if background then
+
+  if opts.background then
     make_cmd = make_cmd .. "!"
   end
+
+  -- Add trailing % for current file if not already present
+  if opts.current then
+    local makeprg = vim.api.nvim_get_option_value("makeprg", { scope = "local" })
+    if not makeprg:find("%%$") then
+      print 'adding trailing perc'
+      make_cmd = make_cmd .. " %"
+    end
+  end
+
   vim.cmd(make_cmd)
 end
 
 function M:setup_keymaps()
   local make = self.maps.make
+  -- run make in foreground
   vim.keymap.set("n", make, function()
-    self:read_and_make()
+    self:read_and_make({ background = false, current = false })
   end)
+  -- run make in background
   vim.keymap.set("n", uppercase_lastkey(make), function()
-    self:read_and_make(true)
+    self:read_and_make({ background = true, current = false })
+  end)
+
+  -- run make with current file wildcard, %, on the end
+  local make_current = self.maps.make_current
+  vim.keymap.set("n", make_current, function()
+    self:read_and_make({ background = false, current = true })
+  end)
+  -- same as above but in the background
+  vim.keymap.set("n", uppercase_lastkey(make_current), function()
+    self:read_and_make({ background = true, current = true })
   end)
 end
 
@@ -105,6 +132,7 @@ local Keymaps = {}
 function M:setup(maps)
   maps = maps or {
     make = "<leader>mk",
+    make_current = "<leader>mu",
   }
   self.maps = maps
   vim.fn.mkdir(state_path, "p")
