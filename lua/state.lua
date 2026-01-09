@@ -1,5 +1,6 @@
 local M = {
-  opts = {},
+  maps = {},
+  opts = {}
 }
 
 local state_path = vim.fn.stdpath("data") .. "/" .. "runner"
@@ -17,13 +18,11 @@ local function check_opt(opt)
   return false
 end
 
-
-local git = require "git"
+local git = require("git")
 -- Returns the path to the state file for the current open file.
 --- @return string
 function M:state_file()
   local git_file_hash = git:git_file_hash()
-  -- TODO use fully qualified path in combination with git branch if available
   local current_file_state = state_path .. "/" .. git_file_hash .. ".json"
   return current_file_state
 end
@@ -81,19 +80,19 @@ end
 ---@param background boolean | nil
 function M:read_and_make(background)
   self:try_read_opts()
-  local make_cmd = 'Make'
+  local make_cmd = "Make"
   if background then
-    make_cmd = make_cmd .. '!'
+    make_cmd = make_cmd .. "!"
   end
   vim.cmd(make_cmd)
 end
 
 function M:setup_keymaps()
-  local opts = self.opts
-  vim.keymap.set("n", opts.make, function()
+  local make = self.maps.make
+  vim.keymap.set("n", make, function()
     self:read_and_make()
   end)
-  vim.keymap.set("n", uppercase_lastkey(opts.make), function()
+  vim.keymap.set("n", uppercase_lastkey(make), function()
     self:read_and_make(true)
   end)
 end
@@ -102,24 +101,15 @@ end
 ---@field make string
 local Keymaps = {}
 
----@class SetupOpts
----@field keymaps Keymaps
-local SetupOpts = {}
-
----@param opts SetupOpts | nil
-function M:setup(opts)
-  print 'setup called'
-  opts = opts or {
-    keymaps = {
-      make = "<leader>mk",
-    },
+---@param maps Keymaps| nil
+function M:setup(maps)
+  maps = maps or {
+    make = "<leader>mk",
   }
-
+  self.maps = maps
   vim.fn.mkdir(state_path, "p")
   self:setup_autocommands()
   self:setup_keymaps()
 end
-
-print 'returning M'
 
 return M
