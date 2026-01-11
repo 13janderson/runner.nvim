@@ -94,7 +94,6 @@ function M:read_and_make(opts)
   if opts.current then
     local makeprg = vim.api.nvim_get_option_value("makeprg", { scope = "local" })
     if not makeprg:find("%%$") then
-      print 'adding trailing perc'
       make_cmd = make_cmd .. " %"
     end
   end
