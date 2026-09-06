@@ -27,12 +27,14 @@ function M:branch()
   return run({ "git", "rev-parse", "--abbrev-ref", "HEAD" })
 end
 
-local Path = require("plenary.path")
 function M:file()
-  local full_buffer_path = Path:new(vim.fn.expand("%:p"))
+  local full_buffer_path = vim.fn.expand("%:p")
   local repo = M:repo()
   if repo ~= nil then
-    return full_buffer_path:make_relative(repo)
+    local prefix = repo .. "/"
+    if full_buffer_path:sub(1, #prefix) == prefix then
+      return full_buffer_path:sub(#prefix + 1)
+    end
   end
   return full_buffer_path
 end

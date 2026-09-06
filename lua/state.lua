@@ -41,6 +41,7 @@ function M:try_read_opts()
   local state_file = io.open(self:state_file(), "r")
   if state_file then
     local state = state_file:read("*a")
+    state_file:close()
     local success, opts = pcall(function()
       return vim.json.decode(state)
     end)
@@ -53,10 +54,11 @@ function M:try_read_opts()
       error("failed to read runner state file.")
     end
   end
+  return state_file ~= nil
 end
 
 function M:setup_autocommands()
-  -- listen to changes in option sets of intest
+  -- listen to changes in option sets of interest
   vim.api.nvim_create_autocmd("OptionSet", {
     callback = function(ev)
       local match = ev.match
@@ -65,6 +67,11 @@ function M:setup_autocommands()
         self.opts[match] = v
         self:write_state_file()
       end
+    end,
+  })
+  vim.api.nvim_create_autocmd({ "QuitPre", "VimLeavePre" }, {
+    callback = function()
+      require("runner").close()
     end,
   })
 end
@@ -82,23 +89,61 @@ end
 ---@field current boolean
 ---@param opts MakeOpts
 function M:read_and_make(opts)
-  self:try_read_opts()
+  local read_state = self:try_read_opts()
   opts = vim.tbl_deep_extend("force", { background = false, current = false }, opts)
-  local make_cmd = "Make"
+  local arguments = ""
 
-  if opts.background then
-    make_cmd = make_cmd .. "!"
-  end
-
-  -- Add trailing % for current file if not already present
+  -- Add trailing % for current file if not already present.
   if opts.current then
     local makeprg = vim.api.nvim_get_option_value("makeprg", { scope = "local" })
     if not makeprg:find("%%$") then
-      make_cmd = make_cmd .. " %"
+      arguments = "%"
     end
   end
 
-  vim.cmd(make_cmd)
+  self:make(arguments, opts.background, read_state)
+end
+
+---@param arguments string
+---@param background boolean
+---@param read_state boolean|nil
+function M:make(arguments, background, read_state)
+  local makeprg = vim.api.nvim_get_option_value("makeprg", { scope = "local" })
+  if makeprg == "" then
+    error("runner: 'makeprg' is empty")
+  end
+
+  local command = makeprg
+  if arguments ~= "" then
+    command = command .. " " .. arguments
+  end
+  vim.notify("runner: " .. (read_state and "state " or "current ") .. command)
+  local errorformat = vim.api.nvim_get_option_value("errorformat", { scope = "local" })
+  require("runner").run(command, background, errorformat)
+end
+
+function M:setup_commands()
+  vim.api.nvim_create_user_command("Make", function(command)
+    self:make(command.args, command.bang)
+  end, {
+    bang = true,
+    nargs = "*",
+    force = true,
+    desc = "Run 'makeprg' in runner's terminal",
+  })
+end
+
+--- pick a command from shell history for the current file; the choice is
+--- persisted as 'makeprg' via the state file and then run immediately
+function M:pick_history()
+  local buffer = vim.api.nvim_get_current_buf()
+  require("history").pick(function(command)
+    vim.api.nvim_set_option_value("makeprg", command, { buf = buffer, scope = "local" })
+    self.opts.makeprg = command
+    self.opts.errorformat = vim.api.nvim_get_option_value("errorformat", { buf = buffer })
+    self:write_state_file()
+    self:read_and_make({ background = false, current = false })
+  end)
 end
 
 function M:setup_keymaps()
@@ -121,21 +166,32 @@ function M:setup_keymaps()
   vim.keymap.set("n", uppercase_lastkey(make_current), function()
     self:read_and_make({ background = true, current = true })
   end)
+
+  -- pick a command from shell history, set it as 'makeprg' and run it
+  local history = self.maps.history
+  if history then
+    vim.keymap.set("n", history, function()
+      self:pick_history()
+    end)
+  end
 end
 
 ---@class Keymaps
 ---@field make string
-local Keymaps = {}
+---@field make_current string
+---@field history string
 
 ---@param maps Keymaps| nil
 function M:setup(maps)
-  maps = maps or {
+  maps = vim.tbl_deep_extend("force", {
     make = "<leader>mk",
     make_current = "<leader>mu",
-  }
+    history = "<C-r>",
+  }, maps or {})
   self.maps = maps
   vim.fn.mkdir(state_path, "p")
   self:setup_autocommands()
+  self:setup_commands()
   self:setup_keymaps()
 end
 
